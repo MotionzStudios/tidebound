@@ -1,0 +1,7 @@
+{
+  "appId": "com.tidebound.fishing",
+  "appName": "Tidebound",
+  "webDir": "www",
+  "backgroundColor": "#0b3b63",
+  "android": { "allowMixedContent": false }
+}
