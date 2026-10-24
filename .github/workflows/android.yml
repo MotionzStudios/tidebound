@@ -40,11 +40,12 @@ jobs:
             buildTypes { release { signingConfig signingConfigs.release } }
           }
           GRADLE
-      - run: cd android && chmod +x gradlew && ./gradlew bundleRelease
+      - run: cd android && chmod +x gradlew && ./gradlew bundleRelease assembleRelease
       - uses: actions/upload-artifact@v4
         with:
           name: tidebound-release
           path: |
             android/app/build/outputs/bundle/release/app-release.aab
+            android/app/build/outputs/apk/release/app-release.apk
             upload.jks
             keystore-password.txt
