@@ -3,5 +3,11 @@
   "appName": "Tidebound",
   "webDir": "www",
   "backgroundColor": "#0b3b63",
-  "android": { "allowMixedContent": false }
+  "android": {
+    "allowMixedContent": false
+  },
+  "ios": {
+    "contentInset": "always",
+    "backgroundColor": "#0b3b63"
+  }
 }
