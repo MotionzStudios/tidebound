@@ -13,7 +13,7 @@ jobs:
       - run: pip install pillow
       - run: python3 build.py
       - run: npm install
-      - run: npm install --no-save @capacitor/ios@latest
+      - run: npm install @capacitor/ios@latest
       - run: npx cap add ios
       - run: npm install --no-save @capacitor/assets && npx capacitor-assets generate --ios --iconBackgroundColor '#18648e' --splashBackgroundColor '#0b3b63'
       - run: npx cap sync ios
