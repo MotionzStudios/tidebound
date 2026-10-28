@@ -18,18 +18,15 @@ if ("serviceWorker" in navigator && location.protocol.startsWith("http")) {
 html = head + src + sw + "</html>\n"
 os.makedirs("www/icons", exist_ok=True)
 open("www/index.html", "w").write(html)
-def icon(n, pad):
+from icongen import make
+def icon(n, pad): return make(n).convert("RGB")
+def grad(n):
     im = Image.new("RGB", (n, n)); d = ImageDraw.Draw(im)
     for y in range(n):
-        k = y / n; d.line([(0, y), (n, y)], fill=(int(43 + (11 - 43) * k), int(143 + (59 - 143) * k), int(184 + (99 - 184) * k)))
-    c = n / 2; s = n * (0.5 - pad)
-    d.ellipse([c - s, c - s * 0.55, c + s * 0.8, c + s * 0.55], fill=(255, 183, 3))           # body
-    d.polygon([(c - s * 0.6, c), (c - s * 1.15, c - s * 0.5), (c - s * 1.15, c + s * 0.5)], fill=(255, 140, 0))  # tail
-    d.ellipse([c + s * 0.35, c - s * 0.25, c + s * 0.6, c], fill=(255, 255, 255)); d.ellipse([c + s * 0.45, c - s * 0.17, c + s * 0.55, c - s * 0.05], fill=(16, 34, 47))
-    for i in range(3): d.arc([c - s * 0.1 + i * s * 0.25, c - s * 0.4, c + s * 0.3 + i * s * 0.25, c + s * 0.4], 300, 60, fill=(230, 120, 0), width=max(2, n // 70))
+        k = y / n; d.line([(0, y), (n, y)], fill=(int(30 + (8 - 30) * k), int(150 + (42 - 150) * k), int(190 + (86 - 190) * k)))
     return im
-os.makedirs("assets", exist_ok=True); icon(1024, 0.18).save("assets/icon-only.png"); icon(1024, 0.30).save("assets/icon-foreground.png"); Image.new("RGB", (1024, 1024), (24, 100, 142)).save("assets/icon-background.png"); icon(1024, 0.20).save("assets/splash.png"); icon(1024, 0.20).save("assets/splash-dark.png")
-icon(192, 0.18).save("www/icons/icon-192.png"); icon(512, 0.18).save("www/icons/icon-512.png"); icon(512, 0.30).save("www/icons/icon-maskable-512.png")
+os.makedirs("assets", exist_ok=True); icon(1024, 0.18).save("assets/icon-only.png"); make(1024, 0.66, True).save("assets/icon-foreground.png"); grad(1024).save("assets/icon-background.png"); make(1024, 0.7).convert("RGB").save("assets/splash.png"); make(1024, 0.7).convert("RGB").save("assets/splash-dark.png")
+icon(192, 0.18).save("www/icons/icon-192.png"); icon(512, 0.18).save("www/icons/icon-512.png"); make(512, 0.8).convert("RGB").save("www/icons/icon-maskable-512.png")
 open("www/manifest.webmanifest", "w").write('''{
   "name": "Tidebound", "short_name": "Tidebound", "description": "A fishing game: cast, hook, reel, collect.",
   "start_url": "./index.html", "scope": "./", "display": "fullscreen", "orientation": "portrait",
