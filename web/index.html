@@ -17,10 +17,15 @@
     --font-display: "Baloo 2", "Trebuchet MS", system-ui, sans-serif;
     color-scheme: light;
   }
+  :root { --sat: env(safe-area-inset-top, 0px); --sab: env(safe-area-inset-bottom, 0px); }
   html, body { height: 100%; margin: 0; }
+  #sbT, #sbB { position: fixed; left: 0; right: 0; background: #0b3b63; }
+  #sbT { top: 0; height: var(--sat); }
+  #sbB { bottom: 0; height: var(--sab); }
   body { background: var(--water-bot); color: var(--ink); overflow: hidden; overscroll-behavior: none; }
-  #c { display: block; width: 100%; height: 100%; touch-action: none; user-select: none; -webkit-user-select: none; -webkit-tap-highlight-color: transparent; }
+  #c { display: block; position: fixed; left: 0; top: var(--sat); width: 100%; height: calc(100% - var(--sat) - var(--sab)); touch-action: none; user-select: none; -webkit-user-select: none; -webkit-tap-highlight-color: transparent; }
 </style>
+<div id="sbT"></div><div id="sbB"></div>
 <canvas id="c" aria-label="Tidebound fishing game. Tap to cast, tap on a bite, hold to reel."></canvas>
 <script>
 "use strict";
@@ -1483,6 +1488,15 @@ function fit() {
   u = Math.min(W / 400, H / 720);
 }
 new ResizeObserver(fit).observe(cv); fit();
+// colour the safe-area strips (status bar / home bar) to match the scene edge
+const sbT = document.getElementById("sbT"), sbB = document.getElementById("sbB");
+setInterval(() => {
+  try {
+    const t = ctx.getImageData(Math.floor(cv.width * 0.55), Math.round(10 * (window.devicePixelRatio || 1)), 1, 1).data, bt = ctx.getImageData(Math.floor(cv.width * 0.5), Math.max(0, cv.height - 3), 1, 1).data;
+    sbT.style.background = "rgb(" + t[0] + "," + t[1] + "," + t[2] + ")";
+    sbB.style.background = "rgb(" + bt[0] + "," + bt[1] + "," + bt[2] + ")";
+  } catch (e) {}
+}, 250);
 
 const FONT = '"Baloo 2", "Trebuchet MS", system-ui, sans-serif';
 function txt(s, x, y, size, color, align, weight) {
