@@ -1266,9 +1266,11 @@ function adsInit() {
     try {
       if (CAPA().getPlatform() === "ios") { step = "tracking"; const st = await A.trackingAuthorizationStatus(); if (st && st.status === "notDetermined") await A.requestTrackingAuthorization(); }
       step = "consent"; adsStatus = "checking consent";
-      let info = await A.requestConsentInfo();
-      if (info && info.isConsentFormAvailable && info.status === "REQUIRED") info = await A.showConsentForm();
-      if (info && info.canRequestAds === false) { adsStatus = "consent: ads not allowed"; return; }
+      try {
+        let info = await A.requestConsentInfo();
+        if (info && info.isConsentFormAvailable && info.status === "REQUIRED") info = await A.showConsentForm();
+        if (info && info.canRequestAds === false) { adsStatus = "consent: ads not allowed"; return; }
+      } catch (ce) { /* consent service unavailable (new AdMob app / no form yet): carry on, ads still load */ }
       step = "initialize"; adsStatus = "starting ads";
       await A.initialize({initializeForTesting: !!cfg.testAds});
       A.addListener("onRewardedVideoAdReward", () => { adRewarded = true; });
