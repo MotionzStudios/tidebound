@@ -275,6 +275,7 @@ let stats = {catches: 0, snaps: 0, earned: 0, big: 0, shiny: 0, tours: 0}, ach =
 const PETS_IDS = ["cat", "pelican", "otter", "crab", "turtle", "dragon"];
 let counts = {}, setDone = {}, bookSel = null, workTab = 0, campOpen = false, campTab = 0, campMsg = "", wk = {id: -1, prog: {}, claimed: {}, defs: []}, pets = {}, petAct = "", boat = 0, hulls = [0], hull = 0, prestige = 0;
 let tokens = 0, vouchers = 0, duelWins = {}, evOwned = [], evBought = {}, aura = -1, evShopOpen = false, evMsg = "";
+let noAds = false, iapDone = [], adGift = "", gemShopOpen = false;
 let gems = 0, guards = 0, respecTok = 0, bonusSp = 0, vaultOpen = false, vaultMsg = "", achCat = 0, guardUsed = false;
 let remindOn = true, rivalWins = {}, rivalCh = {};
 let achOpen = false, achPage = 0, achMsg = "", dailyOpen = false, tutOpen = false, tutStep = 0;
@@ -309,6 +310,7 @@ try {
   if (s.pets && typeof s.pets === "object") { for (const p in s.pets) if (PETS_IDS.includes(p)) pets[p] = Math.max(1, Math.min(5, Math.floor(+s.pets[p]) || 1)); }
   petAct = pets[s.petAct] ? s.petAct : ""; boat = Math.max(0, Math.min(4, Math.floor(+s.boat) || 0));
   if (Array.isArray(s.hulls)) hulls = s.hulls.filter(x => x >= 0 && x < 6); if (!hulls.includes(0)) hulls.push(0); hull = hulls.includes(s.hull) ? s.hull : 0; prestige = Math.max(0, Math.floor(+s.prestige) || 0);
+  noAds = s.noAds === true; if (Array.isArray(s.iapDone)) iapDone = s.iapDone.filter(x => typeof x === "string").slice(-300); adGift = typeof s.adGift === "string" ? s.adGift : "";
   remindOn = s.remindOn !== false; vibOn = s.vibOn !== false; seenTut = !!s.seenTut;
   if (s.mats && typeof s.mats === "object") for (const k in mats) mats[k] = Math.max(0, Math.floor(+s.mats[k]) || 0);
   if (s.look && typeof s.look === "object") for (const k in look) look[k] = Math.max(0, Math.floor(+s.look[k]) || 0);
@@ -326,7 +328,7 @@ try {
     if (s.eq && GEAR[k][s.eq[k]] && owned[k].includes(s.eq[k])) eq[k] = s.eq[k];
   }
 } catch (e) {}
-function save() { try { localStorage.setItem("tidebound.save", JSON.stringify({coins, best, owned, eq, maps: mapsUnlocked, mapIdx, xp, quests, qday, muted, story, qstart, home, skills, buffs, trophies, tWins, look, ownedLook, mats, stats, ach, streak, vibOn, seenTut, remindOn, rivalWins, rivalCh, gems, guards, respecTok, bonusSp, tokens, vouchers, duelWins, evOwned, evBought, aura, counts, setDone, wk, pets, petAct, boat, hulls, hull, prestige})); } catch (e) {} }
+function save() { try { localStorage.setItem("tidebound.save", JSON.stringify({coins, best, owned, eq, maps: mapsUnlocked, mapIdx, xp, quests, qday, muted, story, qstart, home, skills, buffs, trophies, tWins, look, ownedLook, mats, stats, ach, streak, vibOn, seenTut, remindOn, rivalWins, rivalCh, gems, guards, respecTok, bonusSp, tokens, vouchers, duelWins, evOwned, evBought, aura, counts, setDone, wk, pets, petAct, boat, hulls, hull, prestige, noAds, iapDone, adGift})); } catch (e) {} }
 
 // ---------- Shop state ----------
 let mapPage = 0, bookMap = 0;
@@ -1165,11 +1167,164 @@ function drawVault() {
     hits.push({x: m, y, w, h, fn: () => vaultBuy(v)});
   });
   const y0 = 92 * u + VAULT.length * 72 * u + 6 * u;
-  ctx.fillStyle = "rgba(255,255,255,0.06)"; rrect(m, y0, w, 40 * u, 14 * u); ctx.fill();
-  txt("Gem packs: coming soon", W / 2, y0 + 20 * u, 14, "#8fb0c6", "center", 800);
+  ctx.fillStyle = "#ffd166"; rrect(m, y0, w, 40 * u, 14 * u); ctx.fill();
+  txt("Get gems", W / 2, y0 + 21 * u, 16, "#3a2a00", "center", 800);
+  hits.push({x: m, y: y0, w, h: 40 * u, fn: () => { gemShopOpen = true; moneyMsg = ""; }});
   wrapTxt("Earn gems from awards, shiny fish, first legendary and seasonal catches, tournament wins, rival stories and every 10th level. Diamond looks are in Shop > Style, the Celestial Rod and Diamond Line in Shop.", W / 2, y0 + 66 * u, w - 8 * u, 16 * u, 11, "#9bb8d1");
   txt(vaultMsg, W / 2, H - 28 * u, 14, "#7ae8ff", "center", 800);
 }
+
+// ---------- Money: rewarded ads + real-money gems (active in the installed Android/iOS apps) ----------
+const MONEY = /*__MONEY__*/ null;
+const PACKS = [
+  {id: "tidebound_gems_40",  gems: 40,  fb: "0.99", name: "Handful of gems"},
+  {id: "tidebound_gems_120", gems: 120, fb: "2.99", name: "Pouch of gems"},
+  {id: "tidebound_gems_300", gems: 300, fb: "6.99", name: "Chest of gems"},
+  {id: "tidebound_gems_700", gems: 700, fb: "14.99", name: "Trunk of gems"},
+];
+const NOADS_ID = "tidebound_remove_ads";
+const CAPA = () => window.Capacitor || null;
+const NATIVE = () => { const c = CAPA(); try { return !!(c && c.isNativePlatform && c.isNativePlatform()); } catch (e) { return false; } };
+const PLG = n => (CAPA() && CAPA().Plugins && CAPA().Plugins[n]) || null;
+const TEST_MONEY = () => !!window.__MONEY_TEST;
+let moneyMsg = "", iapBusy = false, adBusy = false, storeProducts = {}, storeReady = false, adsReady = false, adCb = null, adRewarded = false;
+const todayKey = () => new Date().toDateString();
+const adsAvailable = () => NATIVE() || TEST_MONEY();
+function canAdDouble() { return !!(result && result.ok && typeof result.gain === "number" && result.gain > 0 && !result.dbl && !(fish && fish.duel) && adsAvailable()); }
+function priceOf(id, fb) { const p = storeProducts[id]; return p && p.priceString ? p.priceString : "EUR " + fb; }
+function grantPurchase(prod, tid) {
+  if (iapDone.includes(tid)) return;
+  iapDone.push(tid); if (iapDone.length > 300) iapDone.shift();
+  if (prod.id === NOADS_ID) { noAds = true; moneyMsg = "Ads removed. Thank you!"; }
+  else { gems += prod.gems; moneyMsg = "+" + prod.gems + " gems. Thank you!"; }
+  SFX.level(); save();
+}
+async function buyProduct(prod) {
+  if (iapBusy) return;
+  if (prod.id === NOADS_ID && noAds) { moneyMsg = "Already unlocked"; return; }
+  if (TEST_MONEY()) { grantPurchase(prod, "test" + Date.now() + Math.random()); return; }
+  const P = PLG("Purchases");
+  if (!NATIVE()) { moneyMsg = "Purchases are available in the mobile app"; return; }
+  if (!P || !storeReady || !storeProducts[prod.id]) { moneyMsg = "Store not ready. Check your connection and try again"; moneyInit(); return; }
+  iapBusy = true; moneyMsg = "Contacting the store...";
+  try {
+    const r = await P.purchaseStoreProduct({product: storeProducts[prod.id]});
+    grantPurchase(prod, (r && r.transaction && r.transaction.transactionIdentifier) || ("t" + Date.now()));
+  } catch (e) { moneyMsg = e && e.userCancelled ? "Purchase cancelled" : "Purchase failed. You were not charged"; }
+  iapBusy = false;
+}
+async function syncOwned() {
+  const P = PLG("Purchases"); if (!P) return false;
+  const r = await P.getCustomerInfo(), ci = r && r.customerInfo;
+  const owned = (ci && ci.allPurchasedProductIdentifiers) || [];
+  if (owned.includes(NOADS_ID) && !noAds) { noAds = true; save(); return true; }
+  return false;
+}
+async function restoreBuys() {
+  if (iapBusy) return;
+  const P = PLG("Purchases");
+  if (!NATIVE() || !P || !storeReady) { moneyMsg = NATIVE() ? "Store not ready. Try again in a moment" : "Available in the mobile app"; return; }
+  iapBusy = true; moneyMsg = "Restoring...";
+  try { await P.restorePurchases(); const got = await syncOwned(); moneyMsg = got ? "Restored: ads removed" : (noAds ? "Ads are already removed" : "Nothing to restore"); }
+  catch (e) { moneyMsg = "Could not restore. Try again later"; }
+  iapBusy = false;
+}
+async function moneyInit() {
+  if (!NATIVE() || storeReady) return;
+  const cfg = MONEY || {}, plat = CAPA().getPlatform(), P = PLG("Purchases"), key = cfg.revenuecat && cfg.revenuecat[plat];
+  if (!P || !key) return;
+  try {
+    await P.configure({apiKey: key});
+    const r = await P.getProducts({productIdentifiers: PACKS.map(x => x.id).concat(NOADS_ID), type: "NON_SUBSCRIPTION"});
+    (r.products || []).forEach(x => { storeProducts[x.identifier] = x; });
+    storeReady = Object.keys(storeProducts).length > 0;
+    await syncOwned();
+  } catch (e) {}
+}
+function preloadAd() {
+  const A = PLG("AdMob"), cfg = MONEY || {}, a = cfg.admob && cfg.admob[CAPA().getPlatform()];
+  if (!A || !a || !a.rewardedId) return;
+  try { Promise.resolve(A.prepareRewardVideoAd({adId: a.rewardedId, isTesting: !!cfg.testAds})).catch(() => {}); } catch (e) {}
+}
+async function adsInit() {
+  if (!NATIVE() || adsReady) return;
+  const A = PLG("AdMob"), cfg = MONEY || {};
+  if (!A || !cfg.admob) return;
+  try {
+    if (CAPA().getPlatform() === "ios") { const st = await A.trackingAuthorizationStatus(); if (st && st.status === "notDetermined") await A.requestTrackingAuthorization(); }
+    let info = await A.requestConsentInfo();
+    if (info && info.isConsentFormAvailable && info.status === "REQUIRED") info = await A.showConsentForm();
+    if (info && info.canRequestAds === false) return;
+    await A.initialize({initializeForTesting: !!cfg.testAds});
+    A.addListener("onRewardedVideoAdReward", () => { adRewarded = true; });
+    A.addListener("onRewardedVideoAdDismissed", () => { finishAd(); });
+    A.addListener("onRewardedVideoAdFailedToShow", () => { adBusy = false; adCb = null; });
+    adsReady = true; preloadAd();
+  } catch (e) {}
+}
+function finishAd() {
+  const cb = adCb, ok = adRewarded; adCb = null; adRewarded = false; adBusy = false;
+  if (cb && ok) cb();
+  preloadAd();
+}
+function showRewardAd(onReward) {
+  if (adBusy) return;
+  if (TEST_MONEY() || noAds) { onReward(); return; }
+  const A = PLG("AdMob");
+  if (!NATIVE() || !A || !adsReady) { say("Ad not ready. Try again in a moment"); moneyMsg = "Ad not ready. Try again in a moment"; adsInit(); return; }
+  adBusy = true; adCb = onReward; adRewarded = false;
+  Promise.resolve(A.showRewardVideoAd()).then(() => { adRewarded = true; setTimeout(() => { if (adCb) finishAd(); }, 1500); })
+    .catch(() => { adBusy = false; adCb = null; say("No ad available right now. Try again soon"); moneyMsg = "No ad available right now. Try again soon"; preloadAd(); });
+}
+function adDouble() {
+  const r = result; if (!r || !r.ok || r.dbl) return;
+  const g = r.gain;
+  showRewardAd(() => {
+    if (result !== r || r.dbl) return;
+    r.dbl = true; coins += g; stats.earned += g;
+    if (r.line) r.line = r.line.replace("+" + g + " coins", "+" + (g * 2) + " coins");
+    say("+" + g + " bonus coins"); SFX.catch(); save();
+  });
+}
+function adGiftClaim() {
+  if (adGift === todayKey()) { moneyMsg = "Come back tomorrow for another gift"; return; }
+  if (!adsAvailable()) { moneyMsg = "Gifts are available in the mobile app"; return; }
+  showRewardAd(() => { adGift = todayKey(); gems += 1; moneyMsg = "+1 gem. See you tomorrow!"; SFX.level(); save(); });
+}
+function drawGemShop() {
+  overlayHeader("Get Gems");
+  const m = 20 * u, w = W - m * 2;
+  drawGem(W - 100 * u, 62 * u, 7 * u); txt(String(gems), W - 88 * u, 66 * u, 18, "#7ae8ff", "left", 800);
+  const row = (i, name, sub, label, can, fn, gold) => {
+    const y = 88 * u + i * 66 * u, h = 58 * u;
+    ctx.fillStyle = "rgba(122,232,255,0.08)"; rrect(m, y, w, h, 16 * u); ctx.fill();
+    txt(name, m + 14 * u, y + 22 * u, 16, "#fff", "left", 800);
+    txt(sub, m + 14 * u, y + 42 * u, 11, "#b9d6e8", "left", 600);
+    const bw = 92 * u, bh = 32 * u, bx = m + w - bw - 10 * u, by = y + (h - bh) / 2;
+    ctx.fillStyle = can ? (gold ? "#ffd166" : "#7ae8ff") : "rgba(255,255,255,0.10)"; rrect(bx, by, bw, bh, bh / 2); ctx.fill();
+    txt(label, bx + bw / 2, by + bh / 2 + 1, 13, can ? "#0e2a3f" : "#8fb0c6", "center", 800);
+    hits.push({x: m, y, w, h, fn});
+  };
+  PACKS.forEach((p, i) => row(i, p.name, "+" + p.gems + " gems", priceOf(p.id, p.fb), true, () => buyProduct(p)));
+  const NA = {id: NOADS_ID};
+  row(4, "Remove ads", "One-time. Free x2 bonus, no ads", noAds ? "Owned" : priceOf(NOADS_ID, "3.99"), !noAds, () => buyProduct(NA), true);
+  const gifted = adGift === todayKey();
+  row(5, "Daily gift", noAds ? "Free +1 gem every day" : "Watch an ad for +1 gem, once a day", gifted ? "Tomorrow" : (noAds ? "Claim" : "Watch ad"), !gifted, adGiftClaim, true);
+  const ry = 88 * u + 6 * 66 * u + 4 * u, rw = 150 * u, rh = 30 * u, rx = m;
+  ctx.strokeStyle = "rgba(255,255,255,0.35)"; ctx.lineWidth = 1.5; rrect(rx, ry, rw, rh, rh / 2); ctx.stroke();
+  txt("Restore purchases", rx + rw / 2, ry + rh / 2 + 1, 12, "#cfe0ff", "center", 700);
+  hits.push({x: rx, y: ry, w: rw, h: rh, fn: restoreBuys});
+  if (NATIVE() && PLG("AdMob")) {
+    const px = rx + rw + 10 * u, pw = 130 * u;
+    ctx.strokeStyle = "rgba(255,255,255,0.35)"; rrect(px, ry, pw, rh, rh / 2); ctx.stroke();
+    txt("Ad privacy", px + pw / 2, ry + rh / 2 + 1, 12, "#cfe0ff", "center", 700);
+    hits.push({x: px, y: ry, w: pw, h: rh, fn: () => { try { Promise.resolve(PLG("AdMob").showPrivacyOptionsForm()).catch(() => {}); } catch (e) {} }});
+  }
+  wrapTxt("Gems buy special gear, pets, boats and boosts in the Gem Vault. Purchases are handled by the App Store or Google Play. Gems have no cash value.", W / 2, ry + 56 * u, w - 8 * u, 16 * u, 11, "#9bb8d1");
+  txt(moneyMsg, W / 2, H - 28 * u, 14, "#7ae8ff", "center", 800);
+}
+setTimeout(moneyInit, 1500); setTimeout(adsInit, 6000);
+
 // ---------- Reminders (local notifications; active in the installed Android/iOS app) ----------
 const LN = () => (window.Capacitor && window.Capacitor.Plugins && window.Capacitor.Plugins.LocalNotifications) || null;
 async function scheduleReminders(ask) {
@@ -2133,7 +2288,7 @@ function draw0() {
 
   // result card
   if (state === RESULT && result) {
-    const cw = Math.min(W - 48 * u, 340 * u), ch = (result.extra ? 266 : 230) * u, cx = (W - cw) / 2, cy = H * 0.30;
+    const cw = Math.min(W - 48 * u, 340 * u), ch = (result.extra ? 266 : 230) * u, cx = (W - cw) / 2, cy = H * (canAdDouble() ? 0.27 : 0.30);
     ctx.fillStyle = "rgba(0,0,0,0.25)"; rrect(cx, cy + 6 * u, cw, ch, 22 * u); ctx.fill();
     ctx.fillStyle = "rgba(255,255,255,0.96)"; rrect(cx, cy, cw, ch, 22 * u); ctx.fill();
     if (result.ok) { ctx.save(); rrect(cx, cy, cw, ch, 22 * u); ctx.clip(); ctx.fillStyle = {Common: "#7fb7d6", Uncommon: "#5fc88a", Rare: "#5b8cff", Legendary: "#ffb703", Special: "#b388ff", Event: "#ff9ee0"}[fish.rarity]; ctx.fillRect(cx, cy, cw, 8 * u); ctx.restore(); }
@@ -2148,8 +2303,15 @@ function draw0() {
       txt(result.title, W / 2, cy + 90 * u, 30, "#c1121f", "center", 800);
       txt(result.sub, W / 2, cy + 135 * u, 18, "#3a5a74", "center", 700);
     }
+    if (canAdDouble()) {
+      const aw = 230 * u, ah = 34 * u, ax = (W - aw) / 2, ay = cy + ch + 12 * u;
+      ctx.fillStyle = "rgba(0,0,0,0.3)"; rrect(ax, ay + 3 * u, aw, ah, ah / 2); ctx.fill();
+      ctx.fillStyle = "#ffd166"; rrect(ax, ay, aw, ah, ah / 2); ctx.fill();
+      txt(noAds ? "Bonus: x2 coins" : "Watch ad: x2 coins", W / 2, ay + ah / 2 + 1, 15, "#3a2a00", "center", 800);
+      hits.push({x: ax, y: ay, w: aw, h: ah, fn: adDouble});
+    }
     if (result.ok && !fish.find) {
-      const full = home.fish.length >= home.slots, kw = 200 * u, kh = 36 * u, kx = (W - kw) / 2, ky = cy + ch + 16 * u;
+      const full = home.fish.length >= home.slots, kw = 200 * u, kh = 36 * u, kx = (W - kw) / 2, ky = cy + ch + 16 * u + (canAdDouble() ? 44 * u : 0);
       if (result.kept) txt("In your aquarium", W / 2, ky + kh / 2, 15, "#9be7b0", "center", 800);
       else {
         ctx.fillStyle = "rgba(0,0,0,0.3)"; rrect(kx, ky + 3 * u, kw, kh, kh / 2); ctx.fill();
@@ -2179,6 +2341,7 @@ function draw0() {
   if (shopOpen) { drawShop(); return; }
   if (mapsOpen) { drawMaps(); return; }
   if (questsOpen) { drawQuests(); return; }
+  if (gemShopOpen) { drawGemShop(); return; }
   if (vaultOpen) { drawVault(); return; }
   if (campOpen) { drawCamp(); return; }
   if (evShopOpen) { drawEventShop(); return; }
@@ -2373,7 +2536,7 @@ function overlayHeader(title) {
   const cs = 44 * u, cx = W - cs - 16 * u, cy = 16 * u;
   ctx.fillStyle = "rgba(255,255,255,0.14)"; rrect(cx, cy, cs, cs, cs / 2); ctx.fill();
   txt("X", cx + cs / 2, cy + cs / 2 + 1, 18, "#fff", "center", 800);
-  hits.push({x: cx, y: cy, w: cs, h: cs, fn: () => { questsOpen = false; bookOpen = false; journalOpen = false; skillsOpen = false; eventsOpen = false; workOpen = false; achOpen = false; rivalsOpen = false; vaultOpen = false; evShopOpen = false; campOpen = false; bookSel = null; }});
+  hits.push({x: cx, y: cy, w: cs, h: cs, fn: () => { questsOpen = false; bookOpen = false; journalOpen = false; skillsOpen = false; eventsOpen = false; workOpen = false; achOpen = false; rivalsOpen = false; vaultOpen = false; gemShopOpen = false; evShopOpen = false; campOpen = false; bookSel = null; }});
 }
 
 function drawQuests() {
@@ -3100,7 +3263,7 @@ cv.addEventListener("pointerdown", e => {
   if (title) { title = false; SFX.click(); if (!seenTut) { tutOpen = true; tutStep = 0; } else if (dailyReady()) dailyOpen = true; else say("Cast near a fish shadow for faster bites"); return; }
   const r = cv.getBoundingClientRect(), x = e.clientX - r.left, y = e.clientY - r.top;
   for (const h of hits) if (x >= h.x && x <= h.x + h.w && y >= h.y && y <= h.y + h.h) { SFX.click(); h.fn(); return; }
-  if (!shopOpen && !mapsOpen && !questsOpen && !bookOpen && !journalOpen && !homeOpen && !skillsOpen && !eventsOpen && !tourneyRes && !workOpen && !achOpen && !dailyOpen && !tutOpen && !rivalsOpen && !vaultOpen && !evShopOpen && !campOpen) { ptr.x = x; ptr.y = y; press(); }
+  if (!shopOpen && !mapsOpen && !questsOpen && !bookOpen && !journalOpen && !homeOpen && !skillsOpen && !eventsOpen && !tourneyRes && !workOpen && !achOpen && !dailyOpen && !tutOpen && !rivalsOpen && !vaultOpen && !gemShopOpen && !evShopOpen && !campOpen) { ptr.x = x; ptr.y = y; press(); }
 });
 ["pointerup", "pointercancel", "pointerleave"].forEach(ev => cv.addEventListener(ev, release));
 cv.addEventListener("pointerup", audioInit);  // touch browsers only unlock audio on release
