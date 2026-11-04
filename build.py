@@ -13,9 +13,11 @@ head = '''<!doctype html>
 <link rel="manifest" href="manifest.webmanifest"><link rel="icon" href="icons/icon-192.png"><link rel="apple-touch-icon" href="icons/icon-192.png">
 '''
 sw = '''<script>
-if ("serviceWorker" in navigator && location.protocol.startsWith("http")) {
-  window.addEventListener("load", () => { try { navigator.serviceWorker.register("sw.js"); } catch (e) {} });
-}
+// The apps load everything from local files, so no offline cache is needed. Remove any old one.
+try {
+  if ("serviceWorker" in navigator) navigator.serviceWorker.getRegistrations().then(rs => rs.forEach(r => r.unregister())).catch(() => {});
+  if (window.caches) caches.keys().then(ks => ks.forEach(k => caches.delete(k))).catch(() => {});
+} catch (e) {}
 </script>
 '''
 html = head + src + sw + "</html>\n"
@@ -41,17 +43,12 @@ open("www/manifest.webmanifest", "w").write('''{
   ]
 }
 ''')
-open("www/sw.js", "w").write('''const CACHE = "tidebound-v1";
-const CORE = ["./", "./index.html", "./manifest.webmanifest", "./icons/icon-192.png", "./icons/icon-512.png", "./icons/icon-maskable-512.png"];
-self.addEventListener("install", e => { e.waitUntil(caches.open(CACHE).then(c => c.addAll(CORE)).then(() => self.skipWaiting())); });
-self.addEventListener("activate", e => { e.waitUntil(caches.keys().then(ks => Promise.all(ks.filter(k => k !== CACHE).map(k => caches.delete(k)))).then(() => self.clients.claim())); });
-// cache-first; also caches the Google font files the first time they load, so the font works offline afterwards
-self.addEventListener("fetch", e => {
-  if (e.request.method !== "GET") return;
-  e.respondWith(caches.match(e.request).then(hit => hit || fetch(e.request).then(res => {
-    if (res && (res.ok || res.type === "opaque")) { const copy = res.clone(); caches.open(CACHE).then(c => c.put(e.request, copy)); }
-    return res;
-  }).catch(() => caches.match("./index.html"))));
-});
+open("www/sw.js", "w").write('''// Kill switch: replaces the old cache-first worker, clears its caches, unregisters itself and reloads the page.
+self.addEventListener("install", e => { self.skipWaiting(); });
+self.addEventListener("activate", e => { e.waitUntil((async () => {
+  try { const ks = await caches.keys(); await Promise.all(ks.map(k => caches.delete(k))); } catch (err) {}
+  try { await self.registration.unregister(); } catch (err) {}
+  try { const cs = await self.clients.matchAll({type: "window", includeUncontrolled: true}); cs.forEach(c => { try { c.navigate(c.url); } catch (err) {} }); } catch (err) {}
+})()); });
 ''')
 print("built", len(html))
