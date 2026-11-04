@@ -1252,7 +1252,7 @@ async function moneyInit() {
 function preloadAd() {
   const A = PLG("AdMob"), cfg = MONEY || {}, a = cfg.admob && cfg.admob[CAPA().getPlatform()];
   if (!A || !a || !a.rewardedId) { adsStatus = "no ad unit id"; return; }
-  try { Promise.resolve(A.prepareRewardVideoAd({adId: a.rewardedId, isTesting: !!cfg.testAds})).then(() => { adsStatus = "ready (ad loaded)"; }).catch(e => { adsStatus = "ad load failed: " + String((e && (e.message || e.code)) || e).slice(0, 50); }); } catch (e) { adsStatus = "ad load error"; }
+  try { Promise.resolve(A.prepareRewardVideoAd({adId: a.rewardedId, isTesting: !!cfg.testAds})).then(() => { adsStatus = "ready (ad loaded)"; }).catch(e => { adsStatus = "ad load failed: " + String((e && (e.message || e.code)) || e).slice(0, 110); }); } catch (e) { adsStatus = "ad load error"; }
 }
 let adsIniting = null;
 function adsInit() {
@@ -1297,7 +1297,7 @@ function showRewardAd(onReward) {
   }
   adBusy = true; adCb = onReward; adRewarded = false;
   Promise.resolve(A.showRewardVideoAd()).then(() => { adRewarded = true; setTimeout(() => { if (adCb) finishAd(); }, 1500); })
-    .catch(e => { adBusy = false; adCb = null; const why = String((e && (e.message || e.code)) || "").slice(0, 50); say("No ad available right now. Try again soon"); moneyMsg = "No ad available (" + why + "). Try again soon"; preloadAd(); });
+    .catch(e => { adBusy = false; adCb = null; const why = String((e && (e.message || e.code)) || "").slice(0, 60); say("No ad available right now. Try again soon"); moneyMsg = "No ad available (" + why + "). Try again soon"; preloadAd(); });
 }
 function adDouble() {
   const r = result; if (!r || !r.ok || r.dbl) return;
@@ -1344,8 +1344,16 @@ function drawGemShop() {
     hits.push({x: px, y: ry, w: pw, h: rh, fn: () => { try { Promise.resolve(PLG("AdMob").showPrivacyOptionsForm()).catch(() => {}); } catch (e) {} }});
   }
   wrapTxt("Gems buy special gear, pets, boats and boosts in the Gem Vault. Purchases are handled by the App Store or Google Play. Gems have no cash value.", W / 2, ry + 56 * u, w - 8 * u, 16 * u, 11, "#9bb8d1");
-  if (NATIVE()) txt("Ads: " + adsStatus + "   Store: " + (storeReady ? "ready" : "not ready"), W / 2, H - 52 * u, 10, "#6f8ea5", "center", 600);
-  txt(moneyMsg, W / 2, H - 28 * u, 14, "#7ae8ff", "center", 800);
+  {
+    const wl = (str, n) => { const L = []; let c = ""; for (const w of String(str).split(" ")) { if ((c + " " + w).trim().length > n && c) { L.push(c); c = w; } else c = (c + " " + w).trim(); } if (c) L.push(c); return L; };
+    const ml = moneyMsg ? wl(moneyMsg, 34) : [];
+    ml.forEach((ln, i) => txt(ln, W / 2, H - 28 * u - (ml.length - 1 - i) * 19 * u, 14, "#7ae8ff", "center", 800));
+    if (NATIVE()) {
+      const sl = wl("Ads: " + adsStatus + "   Store: " + (storeReady ? "ready" : "not ready"), 52);
+      const base = H - 52 * u - Math.max(0, ml.length - 1) * 19 * u;
+      sl.forEach((ln, i) => txt(ln, W / 2, base - (sl.length - 1 - i) * 13 * u, 10, "#6f8ea5", "center", 600));
+    }
+  }
 }
 setTimeout(moneyInit, 1500); setTimeout(adsInit, 6000);
 
