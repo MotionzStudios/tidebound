@@ -24,6 +24,71 @@ jobs:
           sed -i 's#<activity#<activity android:screenOrientation="portrait"#' android/app/src/main/AndroidManifest.xml
           sed -i -E "s/versionCode [0-9]+/versionCode ${{ github.run_number }}/; s/versionName \"[^\"]*\"/versionName \"1.0.${{ github.run_number }}\"/" android/app/build.gradle
       - run: npx cap sync android
+      - name: Keep game inside system bars (native insets passed to the game)
+        run: |
+          mkdir -p android/app/src/main/java/com/tidebound/fishing
+          cat > android/app/src/main/java/com/tidebound/fishing/MainActivity.java <<'JAVA'
+          package com.tidebound.fishing;
+
+          import android.os.Bundle;
+          import android.os.Handler;
+          import android.os.Looper;
+          import android.view.View;
+          import android.webkit.WebView;
+          import androidx.core.graphics.Insets;
+          import androidx.core.view.ViewCompat;
+          import androidx.core.view.WindowInsetsCompat;
+          import com.getcapacitor.BridgeActivity;
+
+          public class MainActivity extends BridgeActivity {
+            private int top = 0, bottom = 0;
+            private final Handler h = new Handler(Looper.getMainLooper());
+
+            private void push() {
+              try {
+                WebView w = getBridge().getWebView();
+                float d = getResources().getDisplayMetrics().density;
+                String js = "document.documentElement.style.setProperty('--sat','" + Math.round(top / d) + "px');"
+                    + "document.documentElement.style.setProperty('--sab','" + Math.round(bottom / d) + "px');";
+                w.evaluateJavascript(js, null);
+              } catch (Exception e) { }
+            }
+
+            private void onInsets(WindowInsetsCompat insets) {
+              Insets bars = insets.getInsets(WindowInsetsCompat.Type.systemBars() | WindowInsetsCompat.Type.displayCutout());
+              top = bars.top; bottom = bars.bottom;
+              push();
+              int[] delays = new int[]{300, 1000, 2500, 5000};
+              for (int ms : delays) h.postDelayed(new Runnable() { public void run() { push(); } }, ms);
+            }
+
+            @Override
+            public void onCreate(Bundle savedInstanceState) {
+              super.onCreate(savedInstanceState);
+              getWindow().getDecorView().setBackgroundColor(0xFF0B3B63);
+              View decor = getWindow().getDecorView();
+              View content = findViewById(android.R.id.content);
+              ViewCompat.setOnApplyWindowInsetsListener(decor, (v, insets) -> { onInsets(insets); return insets; });
+              if (content != null) ViewCompat.setOnApplyWindowInsetsListener(content, (v, insets) -> { onInsets(insets); return insets; });
+              ViewCompat.requestApplyInsets(decor);
+            }
+
+            @Override
+            public void onResume() { super.onResume(); push(); }
+          }
+          JAVA
+      - name: AdMob app ID (Android manifest)
+        run: |
+          python3 - <<'PY'
+          import json, re
+          aid = json.load(open('monetization.json'))['admob']['android']['appId']
+          p = 'android/app/src/main/AndroidManifest.xml'
+          s = open(p).read()
+          if 'com.google.android.gms.ads.APPLICATION_ID' not in s:
+              s = re.sub(r'(<application\b[^>]*>)', r'\1\n<meta-data android:name="com.google.android.gms.ads.APPLICATION_ID" android:value="%s"/>' % aid, s, count=1)
+          open(p, 'w').write(s)
+          print(s)
+          PY
       - name: Create upload key (first run) or reuse secrets
         env:
           KS_B64: ${{ secrets.UPLOAD_KEYSTORE_B64 }}
