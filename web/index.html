@@ -1185,9 +1185,17 @@ const PACKS = [
 const NOADS_ID = "tidebound_remove_ads";
 const CAPA = () => window.Capacitor || null;
 const NATIVE = () => { const c = CAPA(); try { return !!(c && c.isNativePlatform && c.isNativePlatform()); } catch (e) { return false; } };
-const PLG = n => (CAPA() && CAPA().Plugins && CAPA().Plugins[n]) || null;
+const _plg = {};
+const PLG = n => {
+  if (_plg[n]) return _plg[n];
+  const c = CAPA(); if (!c) return null;
+  let r = (c.Plugins && c.Plugins[n]) || null;
+  if (!r && typeof c.registerPlugin === "function" && NATIVE()) { try { r = c.registerPlugin(n); } catch (e) { r = null; } }
+  if (r) _plg[n] = r;
+  return r;
+};
 const TEST_MONEY = () => !!window.__MONEY_TEST;
-let moneyMsg = "", iapBusy = false, adBusy = false, storeProducts = {}, storeReady = false, adsReady = false, adCb = null, adRewarded = false;
+let adsStatus = "not started", moneyMsg = "", iapBusy = false, adBusy = false, storeProducts = {}, storeReady = false, adsReady = false, adCb = null, adRewarded = false;
 const todayKey = () => new Date().toDateString();
 const adsAvailable = () => NATIVE() || TEST_MONEY();
 function canAdDouble() { return !!(result && result.ok && typeof result.gain === "number" && result.gain > 0 && !result.dbl && !(fish && fish.duel) && adsAvailable()); }
@@ -1243,24 +1251,33 @@ async function moneyInit() {
 }
 function preloadAd() {
   const A = PLG("AdMob"), cfg = MONEY || {}, a = cfg.admob && cfg.admob[CAPA().getPlatform()];
-  if (!A || !a || !a.rewardedId) return;
-  try { Promise.resolve(A.prepareRewardVideoAd({adId: a.rewardedId, isTesting: !!cfg.testAds})).catch(() => {}); } catch (e) {}
+  if (!A || !a || !a.rewardedId) { adsStatus = "no ad unit id"; return; }
+  try { Promise.resolve(A.prepareRewardVideoAd({adId: a.rewardedId, isTesting: !!cfg.testAds})).then(() => { adsStatus = "ready (ad loaded)"; }).catch(e => { adsStatus = "ad load failed: " + String((e && (e.message || e.code)) || e).slice(0, 50); }); } catch (e) { adsStatus = "ad load error"; }
 }
-async function adsInit() {
-  if (!NATIVE() || adsReady) return;
-  const A = PLG("AdMob"), cfg = MONEY || {};
-  if (!A || !cfg.admob) return;
-  try {
-    if (CAPA().getPlatform() === "ios") { const st = await A.trackingAuthorizationStatus(); if (st && st.status === "notDetermined") await A.requestTrackingAuthorization(); }
-    let info = await A.requestConsentInfo();
-    if (info && info.isConsentFormAvailable && info.status === "REQUIRED") info = await A.showConsentForm();
-    if (info && info.canRequestAds === false) return;
-    await A.initialize({initializeForTesting: !!cfg.testAds});
-    A.addListener("onRewardedVideoAdReward", () => { adRewarded = true; });
-    A.addListener("onRewardedVideoAdDismissed", () => { finishAd(); });
-    A.addListener("onRewardedVideoAdFailedToShow", () => { adBusy = false; adCb = null; });
-    adsReady = true; preloadAd();
-  } catch (e) {}
+let adsIniting = null;
+function adsInit() {
+  if (!NATIVE() || adsReady) return Promise.resolve();
+  if (adsIniting) return adsIniting;
+  adsIniting = (async () => {
+    const A = PLG("AdMob"), cfg = MONEY || {};
+    if (!A) { adsStatus = "ad plugin missing"; return; }
+    if (!cfg.admob) { adsStatus = "no ad config"; return; }
+    let step = "start";
+    try {
+      if (CAPA().getPlatform() === "ios") { step = "tracking"; const st = await A.trackingAuthorizationStatus(); if (st && st.status === "notDetermined") await A.requestTrackingAuthorization(); }
+      step = "consent"; adsStatus = "checking consent";
+      let info = await A.requestConsentInfo();
+      if (info && info.isConsentFormAvailable && info.status === "REQUIRED") info = await A.showConsentForm();
+      if (info && info.canRequestAds === false) { adsStatus = "consent: ads not allowed"; return; }
+      step = "initialize"; adsStatus = "starting ads";
+      await A.initialize({initializeForTesting: !!cfg.testAds});
+      A.addListener("onRewardedVideoAdReward", () => { adRewarded = true; });
+      A.addListener("onRewardedVideoAdDismissed", () => { finishAd(); });
+      A.addListener("onRewardedVideoAdFailedToShow", () => { adBusy = false; adCb = null; });
+      adsReady = true; adsStatus = "ready"; preloadAd();
+    } catch (e) { adsStatus = "error at " + step + ": " + String((e && (e.message || e.code)) || e).slice(0, 60); }
+  })().finally(() => { adsIniting = null; });
+  return adsIniting;
 }
 function finishAd() {
   const cb = adCb, ok = adRewarded; adCb = null; adRewarded = false; adBusy = false;
@@ -1271,10 +1288,14 @@ function showRewardAd(onReward) {
   if (adBusy) return;
   if (TEST_MONEY() || noAds) { onReward(); return; }
   const A = PLG("AdMob");
-  if (!NATIVE() || !A || !adsReady) { say("Ad not ready. Try again in a moment"); moneyMsg = "Ad not ready. Try again in a moment"; adsInit(); return; }
+  if (!NATIVE() || !A || !adsReady) {
+    say("Starting ads. Tap again in a moment"); moneyMsg = "Ads starting (" + adsStatus + "). Tap again";
+    adsInit().then(() => { moneyMsg = adsReady ? "Ads ready. Tap again" : "Ads unavailable: " + adsStatus; if (!adsReady) say("Ads unavailable: " + adsStatus); });
+    return;
+  }
   adBusy = true; adCb = onReward; adRewarded = false;
   Promise.resolve(A.showRewardVideoAd()).then(() => { adRewarded = true; setTimeout(() => { if (adCb) finishAd(); }, 1500); })
-    .catch(() => { adBusy = false; adCb = null; say("No ad available right now. Try again soon"); moneyMsg = "No ad available right now. Try again soon"; preloadAd(); });
+    .catch(e => { adBusy = false; adCb = null; const why = String((e && (e.message || e.code)) || "").slice(0, 50); say("No ad available right now. Try again soon"); moneyMsg = "No ad available (" + why + "). Try again soon"; preloadAd(); });
 }
 function adDouble() {
   const r = result; if (!r || !r.ok || r.dbl) return;
@@ -1321,6 +1342,7 @@ function drawGemShop() {
     hits.push({x: px, y: ry, w: pw, h: rh, fn: () => { try { Promise.resolve(PLG("AdMob").showPrivacyOptionsForm()).catch(() => {}); } catch (e) {} }});
   }
   wrapTxt("Gems buy special gear, pets, boats and boosts in the Gem Vault. Purchases are handled by the App Store or Google Play. Gems have no cash value.", W / 2, ry + 56 * u, w - 8 * u, 16 * u, 11, "#9bb8d1");
+  if (NATIVE()) txt("Ads: " + adsStatus + "   Store: " + (storeReady ? "ready" : "not ready"), W / 2, H - 52 * u, 10, "#6f8ea5", "center", 600);
   txt(moneyMsg, W / 2, H - 28 * u, 14, "#7ae8ff", "center", 800);
 }
 setTimeout(moneyInit, 1500); setTimeout(adsInit, 6000);
