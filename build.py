@@ -2,6 +2,9 @@
 import re, os
 from PIL import Image, ImageDraw
 src = open("../web/index.html" if os.path.exists("../web/index.html") else "web/index.html").read()
+import json
+_mc = json.load(open("monetization.json")) if os.path.exists("monetization.json") else None
+src = src.replace("/*__MONEY__*/ null", json.dumps(_mc) if _mc else "null")
 head = '''<!doctype html>
 <html lang="en"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,user-scalable=no">

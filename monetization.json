@@ -1,0 +1,17 @@
+{
+  "testAds": true,
+  "admob": {
+    "android": {
+      "appId": "ca-app-pub-3940256099942544~3347511713",
+      "rewardedId": "ca-app-pub-3940256099942544/5224354917"
+    },
+    "ios": {
+      "appId": "ca-app-pub-3940256099942544~1458002511",
+      "rewardedId": "ca-app-pub-3940256099942544/1712485313"
+    }
+  },
+  "revenuecat": {
+    "android": "",
+    "ios": ""
+  }
+}
