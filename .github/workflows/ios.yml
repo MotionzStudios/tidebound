@@ -40,6 +40,16 @@ jobs:
           echo "TEAM=$(echo "$T" | awk '{print $1}')" >> $GITHUB_ENV
           echo "KEYID=$(echo "$K" | awk '{print $1}')" >> $GITHUB_ENV
           echo "ISSUER=$(echo "$I" | awk '{print $1}')" >> $GITHUB_ENV
+      - name: AdMob and tracking keys (iOS Info.plist)
+        run: |
+          P=ios/App/App/Info.plist
+          AID=$(python3 -c "import json;print(json.load(open('monetization.json'))['admob']['ios']['appId'])")
+          /usr/libexec/PlistBuddy -c "Add :GADApplicationIdentifier string $AID" $P || /usr/libexec/PlistBuddy -c "Set :GADApplicationIdentifier $AID" $P
+          /usr/libexec/PlistBuddy -c "Add :NSUserTrackingUsageDescription string This lets us show ads that are more relevant to you. You can say no and still play." $P || true
+          /usr/libexec/PlistBuddy -c "Add :SKAdNetworkItems array" $P || true
+          /usr/libexec/PlistBuddy -c "Add :SKAdNetworkItems:0 dict" $P || true
+          /usr/libexec/PlistBuddy -c "Add :SKAdNetworkItems:0:SKAdNetworkIdentifier string cstr6suwn9.skadnetwork" $P || true
+          cat $P
       - name: Write App Store Connect API key
         env:
           KEY: ${{ secrets.ASC_KEY_P8 }}
