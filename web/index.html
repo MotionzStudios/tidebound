@@ -1885,7 +1885,7 @@ const ROD_ST = [
   {body: "#2a0f12", edge: "#000000", w: 4.4, grip: "#ffb703", reel: "#ff6a3d", rr: 14, guides: true, glow: true, gc: "255,110,60", wrap: "#ffb703"},
   {body: "#aef3ff", edge: "#1a5a78", w: 4.6, grip: "#7a5cff", reel: "#e8fbff", rr: 15, guides: true, glow: true, gc: "140,240,255", wrap: "#ffffff"},
 ];
-const LINE_BASE = ["#ffffff", "#9be7b0", "#bfe6ff", "#ffb26e"];
+const LINE_BASE = ["#ffffff", "#9be7b0", "#bfe6ff", "#ffb26e", "#7ae8ff"];
 const LURE_ST = [
   {top: "#f8f6f0", bot: "#ef476f"}, {top: "#e9f2ff", bot: "#3b82c4", x: "blade"}, {top: "#ffe9c2", bot: "#3f8f5a", x: "fly"},
   {top: "#fff2b0", bot: "#ffb703", x: "gold"}, {top: "#fff6d0", bot: "#ffd166", x: "lamp"},
@@ -2314,7 +2314,7 @@ function draw0() {
       ctx.globalAlpha = 1;
     }
     if (eq.line === 3) { ctx.strokeStyle = "rgba(255,150,80," + (0.25 + 0.1 * Math.sin(t * 6)).toFixed(2) + ")"; ctx.lineWidth = 6 * u; ctx.beginPath(); ctx.moveTo(tipX, tipY); ctx.lineTo(bx, by); ctx.stroke(); }
-    ctx.strokeStyle = state === REEL ? lerpCol(LINE_BASE[eq.line], "#ef476f", tension) : LINE_BASE[eq.line];
+    const lc = LINE_BASE[eq.line] || "#ffffff"; ctx.strokeStyle = state === REEL ? lerpCol(lc, "#ef476f", tension) : lc;
     ctx.lineWidth = (eq.line === 1 ? 2.6 : 2) * u; if (eq.line === 1) ctx.setLineDash([5 * u, 2 * u]);
     ctx.beginPath(); ctx.moveTo(tipX, tipY); ctx.lineTo(bx, by); ctx.stroke(); ctx.setLineDash([]);
     ctx.strokeStyle = "rgba(255,255,255,0.35)"; ctx.lineWidth = 1.5 * u;
@@ -3341,7 +3341,7 @@ ensureQuests();
 let last = performance.now();
 function frame(now) {
   const dt = Math.min(0.05, (now - last) / 1000); last = now;
-  update(dt); draw();
+  try { update(dt); draw(); } catch (e) { try { console.error(e); } catch (_) {} }
   requestAnimationFrame(frame);
 }
 requestAnimationFrame(frame);
