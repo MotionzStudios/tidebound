@@ -1391,7 +1391,8 @@ async function moneyInit() {
 function preloadAd() {
   const A = PLG("AdMob"), cfg = MONEY || {}, a = cfg.admob && cfg.admob[CAPA().getPlatform()];
   if (!A || !a || !a.rewardedId) { adsStatus = "no ad unit id"; return; }
-  try { Promise.resolve(A.prepareRewardVideoAd({adId: a.rewardedId, isTesting: !!cfg.testAds})).then(() => { adsStatus = "ready (ad loaded)"; }).catch(e => { adsStatus = "ad load failed: " + String((e && (e.message || e.code)) || e).slice(0, 110); }); } catch (e) { adsStatus = "ad load error"; }
+  try { return Promise.resolve(A.prepareRewardVideoAd({adId: a.rewardedId, isTesting: !!cfg.testAds})).then(() => { adsStatus = "ready (ad loaded)"; return true; }).catch(e => { adsStatus = "ad load failed: " + String((e && (e.message || e.code)) || e).slice(0, 110); return false; }); } catch (e) { adsStatus = "ad load error"; }
+  return Promise.resolve(false);
 }
 let adsIniting = null;
 function adsInit() {
@@ -1434,9 +1435,14 @@ function showRewardAd(onReward) {
     adsInit().then(() => { moneyMsg = adsReady ? "Ads ready. Tap again" : "Ads unavailable: " + adsStatus; if (!adsReady) say("Ads unavailable: " + adsStatus); });
     return;
   }
+  if (adsStatus.indexOf("ready (ad loaded)") !== 0) {
+    adBusy = true; say("Loading ad...");
+    preloadAd().then(ok => { adBusy = false; if (ok) showRewardAd(onReward); else { moneyMsg = "Ad failed: " + adsStatus; say("Ad failed: " + adsStatus); } });
+    return;
+  }
   adBusy = true; adCb = onReward; adRewarded = false;
   Promise.resolve(A.showRewardVideoAd()).then(() => { adRewarded = true; setTimeout(() => { if (adCb) finishAd(); }, 1500); })
-    .catch(e => { adBusy = false; adCb = null; const why = String((e && (e.message || e.code)) || "").slice(0, 60); say("No ad available right now. Try again soon"); moneyMsg = "No ad available (" + why + "). Try again soon"; preloadAd(); });
+    .catch(e => { adBusy = false; adCb = null; const why = String((e && (e.message || e.code)) || "").slice(0, 60); say("No ad available right now. Try again soon"); moneyMsg = "No ad available (" + why + "). " + adsStatus; preloadAd(); });
 }
 function adDouble() {
   const r = result; if (!r || !r.ok || r.dbl) return;
