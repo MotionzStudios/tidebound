@@ -1391,7 +1391,8 @@ async function moneyInit() {
 function preloadAd() {
   const A = PLG("AdMob"), cfg = MONEY || {}, a = cfg.admob && cfg.admob[CAPA().getPlatform()];
   if (!A || !a || !a.rewardedId) { adsStatus = "no ad unit id"; return; }
-  try { return Promise.resolve(A.prepareRewardVideoAd({adId: a.rewardedId, isTesting: !!cfg.testAds})).then(() => { adsStatus = "ready (ad loaded)"; return true; }).catch(e => { adsStatus = "ad load failed: " + String((e && (e.message || e.code)) || e).slice(0, 110); return false; }); } catch (e) { adsStatus = "ad load error"; }
+  const tryLoad = (n) => Promise.resolve(A.prepareRewardVideoAd({adId: a.rewardedId, isTesting: !!cfg.testAds})).then(() => { adsStatus = "ready (ad loaded)"; return true; }).catch(e => { adsStatus = "ad load failed (try " + n + "/3): " + String((e && (e.message || e.code)) || e).slice(0, 90); return n < 3 ? new Promise(r => setTimeout(r, 2500)).then(() => tryLoad(n + 1)) : false; });
+  try { return tryLoad(1); } catch (e) { adsStatus = "ad load error"; }
   return Promise.resolve(false);
 }
 let adsIniting = null;
