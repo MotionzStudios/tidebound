@@ -1333,7 +1333,7 @@ const PLG = n => {
   return r;
 };
 const TEST_MONEY = () => !!window.__MONEY_TEST;
-let adsStatus = "not started", moneyMsg = "", iapBusy = false, adBusy = false, storeProducts = {}, storeReady = false, adsReady = false, adCb = null, adRewarded = false;
+let adsDiag = "", adsStatus = "not started", moneyMsg = "", iapBusy = false, adBusy = false, storeProducts = {}, storeReady = false, adsReady = false, adCb = null, adRewarded = false;
 const todayKey = () => new Date().toDateString();
 const adsAvailable = () => NATIVE() || TEST_MONEY();
 function canAdDouble() { return !!(result && result.ok && typeof result.gain === "number" && result.gain > 0 && !result.dbl && !(fish && fish.duel) && adsAvailable()); }
@@ -1405,13 +1405,13 @@ function adsInit() {
     if (!cfg.admob) { adsStatus = "no ad config"; return; }
     let step = "start";
     try {
-      if (CAPA().getPlatform() === "ios") { step = "tracking"; const st = await A.trackingAuthorizationStatus(); if (st && st.status === "notDetermined") await A.requestTrackingAuthorization(); }
+      if (CAPA().getPlatform() === "ios") { step = "tracking"; let st = await A.trackingAuthorizationStatus(); if (st && st.status === "notDetermined") { await A.requestTrackingAuthorization(); st = await A.trackingAuthorizationStatus(); } adsDiag = "att:" + (st && st.status); }
       step = "consent"; adsStatus = "checking consent";
       try {
-        let info = await A.requestConsentInfo();
+        let info = await A.requestConsentInfo(); adsDiag += " consent:" + (info && info.status) + " form:" + (info && info.isConsentFormAvailable) + " can:" + (info && info.canRequestAds);
         if (info && info.isConsentFormAvailable && info.status === "REQUIRED") info = await A.showConsentForm();
         if (info && info.canRequestAds === false) { adsStatus = "consent: ads not allowed"; return; }
-      } catch (ce) { /* consent service unavailable (new AdMob app / no form yet): carry on, ads still load */ }
+      } catch (ce) { adsDiag += " consentErr:" + String((ce && (ce.message || ce.code)) || ce).slice(0, 40); /* consent service unavailable (new AdMob app / no form yet): carry on, ads still load */ }
       step = "initialize"; adsStatus = "starting ads";
       await A.initialize({initializeForTesting: !!cfg.testAds});
       A.addListener("onRewardedVideoAdReward", () => { adRewarded = true; });
@@ -1495,7 +1495,7 @@ function drawGemShop() {
     const ml = moneyMsg ? wl(moneyMsg, 34) : [];
     ml.forEach((ln, i) => txt(ln, W / 2, H - 28 * u - (ml.length - 1 - i) * 19 * u, 14, "#7ae8ff", "center", 800));
     if (NATIVE()) {
-      const sl = wl("Ads: " + adsStatus + "   Store: " + (storeReady ? "ready" : "not ready"), 52);
+      const sl = wl("Ads: " + adsStatus + " [" + adsDiag + "]   Store: " + (storeReady ? "ready" : "not ready"), 52);
       const base = H - 52 * u - Math.max(0, ml.length - 1) * 19 * u;
       sl.forEach((ln, i) => txt(ln, W / 2, base - (sl.length - 1 - i) * 13 * u, 10, "#6f8ea5", "center", 600));
     }
