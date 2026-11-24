@@ -21,6 +21,15 @@ jobs:
       - run: npx cap add ios
       - run: npm install --no-save @capacitor/assets && npx capacitor-assets generate --ios --iconBackgroundColor '#18648e' --splashBackgroundColor '#0b3b63'
       - run: npx cap sync ios
+      - name: Game Center (native plugin, entitlement, project wiring)
+        run: |
+          cp GameCenterPlugin.swift MyViewController.swift App.entitlements ios/App/App/
+          sudo gem install xcodeproj --no-document || true
+          ruby add_native.rb
+          SB=$(find ios/App/App -name Main.storyboard | head -1); echo "Storyboard: $SB"
+          sed -i '' 's/customClass="CAPBridgeViewController" customModule="Capacitor"/customClass="MyViewController" customModule="App"/' "$SB"
+          grep -c MyViewController "$SB" || echo "WARNING: storyboard not patched"
+          grep -n "CODE_SIGN_ENTITLEMENTS" ios/App/App.xcodeproj/project.pbxproj | head -3
       - name: Portrait only, version numbers, encryption flag
         run: |
           P=ios/App/App/Info.plist
@@ -29,7 +38,7 @@ jobs:
           /usr/libexec/PlistBuddy -c "Add :UISupportedInterfaceOrientations:0 string UIInterfaceOrientationPortrait" $P
           /usr/libexec/PlistBuddy -c "Delete :UISupportedInterfaceOrientations~ipad" $P || true
           /usr/libexec/PlistBuddy -c "Add :ITSAppUsesNonExemptEncryption bool false" $P || true
-          sed -i '' "s/CURRENT_PROJECT_VERSION = [0-9]*;/CURRENT_PROJECT_VERSION = ${{ github.run_number }};/; s/MARKETING_VERSION = [0-9.]*;/MARKETING_VERSION = 1.1.0;/" ios/App/App.xcodeproj/project.pbxproj
+          sed -i '' "s/CURRENT_PROJECT_VERSION = [0-9]*;/CURRENT_PROJECT_VERSION = ${{ github.run_number }};/; s/MARKETING_VERSION = [0-9.]*;/MARKETING_VERSION = 1.2.0;/" ios/App/App.xcodeproj/project.pbxproj
           sed -i '' 's/TARGETED_DEVICE_FAMILY = "1,2";/TARGETED_DEVICE_FAMILY = 1;/' ios/App/App.xcodeproj/project.pbxproj
       - name: Clean IDs (first word only)
         env:
@@ -66,6 +75,8 @@ jobs:
         run: |
           APP=$(find $RUNNER_TEMP/App.xcarchive/Products/Applications -maxdepth 1 -name "*.app" | head -1)
           echo "App: $APP"
+          codesign --force --sign - --entitlements ios/App/App/App.entitlements "$APP" || echo "adhoc sign with entitlements failed"
+          codesign -d --entitlements :- "$APP" 2>&1 | head -12 || true
           for F in "$APP"/Frameworks/*.framework; do
             [ -d "$F" ] || continue
             echo "Unsigning $F"
