@@ -358,7 +358,7 @@ try {
     if (s.eq && GEAR[k][s.eq[k]] && owned[k].includes(s.eq[k])) eq[k] = s.eq[k];
   }
 } catch (e) {}
-function save() { try { localStorage.setItem("tidebound.save", JSON.stringify({coins: coins + (pend ? pend.gain : 0), best, owned, eq, maps: mapsUnlocked, mapIdx, xp, quests, qday, muted, story, qstart, home, skills, buffs, trophies, tWins, look, ownedLook, mats, stats, ach, streak, vibOn, seenTut, remindOn, rivalWins, rivalCh, gems, guards, respecTok, bonusSp, tokens, vouchers, duelWins, evOwned, evBought, aura, counts, setDone, wk, pets, petAct, boat, hulls, hull, prestige, noAds, iapDone, adGift})); } catch (e) {} }
+function save() { try { if (gcAuthed) gcSubmit(); } catch (e) {} try { localStorage.setItem("tidebound.save", JSON.stringify({coins: coins + (pend ? pend.gain : 0), best, owned, eq, maps: mapsUnlocked, mapIdx, xp, quests, qday, muted, story, qstart, home, skills, buffs, trophies, tWins, look, ownedLook, mats, stats, ach, streak, vibOn, seenTut, remindOn, rivalWins, rivalCh, gems, guards, respecTok, bonusSp, tokens, vouchers, duelWins, evOwned, evBought, aura, counts, setDone, wk, pets, petAct, boat, hulls, hull, prestige, noAds, iapDone, adGift})); } catch (e) {} }
 
 // ---------- Shop state ----------
 let mapPage = 0, bookMap = 0;
@@ -1336,6 +1336,47 @@ const TEST_MONEY = () => !!window.__MONEY_TEST;
 let adsDiag = "", adsStatus = "not started", moneyMsg = "", iapBusy = false, adBusy = false, storeProducts = {}, storeReady = false, adsReady = false, adCb = null, adRewarded = false;
 const todayKey = () => new Date().toDateString();
 const adsAvailable = () => NATIVE() || TEST_MONEY();
+
+// ---- Game Center leaderboards (iPhone) ----
+const GC_IDS = {prestige: "tidebound_prestige", coins: "tidebound_coins", fish: "tidebound_biggest_fish"};
+let gcStatus = "off", gcAuthed = false, gcSent = {}, gcLast = 0, gcTried = false;
+const GCP = () => NATIVE() ? PLG("GameCenter") : null;
+function gcErr(e) { return String((e && (e.message || e.code)) || e).slice(0, 80); }
+function gcInit() {
+  const G = GCP(); if (!G || gcStatus === "signing in" || gcAuthed) return;
+  gcStatus = "signing in";
+  G.signIn().then(r => {
+    gcAuthed = !!(r && r.authenticated);
+    gcStatus = gcAuthed ? "ready" : "not signed in" + (r && r.error ? " (" + String(r.error).slice(0, 50) + ")" : "");
+    if (gcAuthed) gcSubmit(true);
+  }).catch(e => { gcStatus = "error: " + gcErr(e); });
+}
+function gcScores() {
+  const o = {};
+  o[GC_IDS.prestige] = Math.floor(prestige || 0);
+  o[GC_IDS.coins] = Math.floor(stats.earned || 0);
+  o[GC_IDS.fish] = Math.round((stats.big || 0) * 100);
+  return o;
+}
+function gcSubmit(force) {
+  const G = GCP(); if (!G || !gcAuthed) return;
+  const now = Date.now(); if (!force && now - gcLast < 20000) return;
+  gcLast = now;
+  const sc = gcScores();
+  Object.keys(sc).forEach(id => {
+    const v = sc[id]; if (!(v > 0) || gcSent[id] === v) return;
+    gcSent[id] = v;
+    G.submitScore({leaderboardId: id, score: v}).catch(e => { delete gcSent[id]; gcStatus = "submit failed: " + gcErr(e); });
+  });
+}
+function gcShow() {
+  const G = GCP();
+  if (!G) { say("Leaderboards are in the iPhone app (Game Center)"); return; }
+  if (!gcAuthed) { gcInit(); say("Sign in to Game Center, then tap Ranks again. " + gcStatus); return; }
+  gcSubmit(true);
+  G.showLeaderboards().catch(e => { say("Leaderboards unavailable: " + gcErr(e)); });
+}
+
 function canAdDouble() { return !!(result && result.ok && typeof result.gain === "number" && result.gain > 0 && !result.dbl && !(fish && fish.duel) && adsAvailable()); }
 function priceOf(id, fb) { const p = storeProducts[id]; return p && p.priceString ? p.priceString : "EUR " + fb; }
 function grantPurchase(prod, tid) {
@@ -2616,6 +2657,10 @@ function draw0() {
       ctx.fillStyle = "rgba(8,30,50,0.55)"; rrect(lx, ly, lw, mh, mh / 2); ctx.fill();
       ctx.font = "700 " + Math.round(11 * u) + "px " + FONT; ctx.fillStyle = "#e6f1ff"; ctx.textAlign = "center"; ctx.fillText(lang.toUpperCase(), lx + lw / 2, ly + mh / 2 + 1);
       hits.push({x: lx, y: ly, w: lw, h: mh, fn: () => { langOpen = true; }}); }
+    { const rx = 304 * u, rw = 52 * u, ry = 96 * u;
+      ctx.fillStyle = "rgba(8,30,50,0.55)"; rrect(rx, ry, rw, mh, mh / 2); ctx.fill();
+      txt("Ranks", rx + rw / 2, ry + mh / 2 + 1, 11, "#ffd166", "center", 700, rw - 8 * u);
+      hits.push({x: rx, y: ry, w: rw, h: mh, fn: () => { gcShow(); }}); }
     { const qx = 168 * u, qw = 84 * u, qy = 96 * u;
       ctx.fillStyle = "rgba(8,30,50,0.55)"; rrect(qx, qy, qw, mh, mh / 2); ctx.fill();
       txt("Aquarium " + home.fish.length + "/" + homeSlots(), qx + qw / 2, qy + mh / 2 + 1, 11, "#e6f1ff", "center", 700, qw - 8 * u);
@@ -3524,6 +3569,7 @@ let last = performance.now();
 function frame(now) {
   const dt = Math.min(0.05, (now - last) / 1000); last = now;
   try { update(dt); draw(); } catch (e) { try { console.error(e); } catch (_) {} }
+  if (!gcTried) { gcTried = true; setTimeout(() => { try { gcInit(); } catch (e) {} }, 3500); }
   requestAnimationFrame(frame);
 }
 requestAnimationFrame(frame);
