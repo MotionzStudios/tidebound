@@ -1340,7 +1340,7 @@ const adsAvailable = () => NATIVE() || TEST_MONEY();
 // ---- Game Center leaderboards (iPhone) ----
 const GC_IDS = {prestige: "tidebound_prestige", coins: "tidebound_coins", fish: "tidebound_biggest_fish"};
 let gcStatus = "off", gcAuthed = false, gcSent = {}, gcLast = 0, gcTried = false;
-const GCP = () => NATIVE() ? PLG("GameCenter") : null;
+const GCP = () => { if (!NATIVE()) return null; let r = PLG("GameCenter"); if (!r) { try { r = CAPA().registerPlugin("GameCenter"); } catch (e) { r = null; } } return r; };
 function gcErr(e) { return String((e && (e.message || e.code)) || e).slice(0, 80); }
 function gcInit() {
   const G = GCP(); if (!G || gcStatus === "signing in" || gcAuthed) return;
@@ -1371,7 +1371,11 @@ function gcSubmit(force) {
 }
 function gcShow() {
   const G = GCP();
-  if (!G) { say("Leaderboards are in the iPhone app (Game Center)"); return; }
+  if (!G) {
+    const c = CAPA(); let pl = "?"; try { pl = c && c.getPlatform ? c.getPlatform() : "none"; } catch (e) {}
+    let rp = "-"; try { rp = c && typeof c.registerPlugin === "function" ? (c.registerPlugin("GameCenter") ? "ok" : "null") : "nofn"; } catch (e) { rp = "err " + gcErr(e); }
+    say(NATIVE() ? "Game Center plugin missing (" + rp + ")" : "Leaderboards are in the iPhone app [" + pl + "]"); return;
+  }
   if (!gcAuthed) { gcInit(); say("Sign in to Game Center, then tap Ranks again. " + gcStatus); return; }
   gcSubmit(true);
   G.showLeaderboards().catch(e => { say("Leaderboards unavailable: " + gcErr(e)); });
